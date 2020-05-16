@@ -1,40 +1,61 @@
 /*
  * Demonstrates the use of ST7735 for the control panel of Lampe.
- * It shows the 4 times (2 intervals) and simulates the rotation of an encoder.
- * It also shows the current time and simulates the light being turned on and off
- * as well as reporting I2C exchanges.
+ * It shows the 4 times (2 intervals), one of them is controlled by a rotary encoder.
+ * It simulates showing the "current time" with a blinking ':', the light being turned on
+ * and off as well as reporting on I2C exchanges.
  */
 
 #include <SPI.h>
 #include "PrestoST7735.h"
+#include "RotaryEncoder.h"
 #include "spec.h"
+
+PrestoST7735& st7735 = PrestoST7735::Instance();
+RotaryEncoder encoders[4] = {
+  RotaryEncoder(8, 7, 6),
+  RotaryEncoder(0, 0, 0),
+  RotaryEncoder(0, 0, 0),
+  RotaryEncoder(0, 0, 0),
+};
+
+void writeTime(uint_fast16_t time) {
+  static PrestoText& numbers = st7735.text(proportional15x21);
+  static char buffer[13];
+
+  sprintf(buffer,"%02d:%02d", time / 60, time % 60);
+  numbers.write(buffer);
+}
 
 void setup() {
 #ifndef NDEBUG
   Serial.begin(9600);
 #endif
   SPI.begin();
-  PrestoST7735& st7735 = PrestoST7735::Instance();
+  for(int i = 0;i < sizeof(encoders) / sizeof(encoders[0]) ;i++)
+    encoders[i].begin();
   st7735.begin();
   st7735.erase();
   PrestoText& numbers = st7735.text(proportional15x21);
+  PrestoText& symbols = st7735.text(symbols25x16);
   numbers.xy(3, 70);
   numbers.write(F("20:00"));
   numbers.moveX(21);
   numbers.write(F("23:30"));
+  numbers.xy(3, 32);
+  numbers.write(F("06:00"));
+  numbers.moveX(21);
+  numbers.write(F("08:00"));
+  symbols.xy(3, 107);
+  symbols.write(F("1"));
 }
 
 void loop() {
   static unsigned long second = millis() + 1000;
-  static unsigned long simule = 0;
   static unsigned long fail   = millis() + random(6000, 20000);
-  static unsigned long light  = 0;
-  static int h = 8, m = 0;
-  static char buffer[13];
+  static int time = 8 * 60;
   static bool semicolon = true;
   static bool transmit = true;
   static bool fluo = true;
-  static PrestoST7735& st7735 = PrestoST7735::Instance();
   static PrestoText& mono = st7735.text(monospace5x7);
   static PrestoText& numbers = st7735.text(proportional15x21);
   static PrestoText& symbols = st7735.text(symbols25x16);
@@ -45,12 +66,11 @@ void loop() {
       fail = millis() + random(6000, 20000);
     transmit = !transmit;
   }
-  if(millis() > light) {
+  if(encoders[0].click()) {
     symbols.foreground(fg_colour);
     symbols.xy(3, 107);
     symbols.write(fluo ? F("0") : F("1"));
     fluo = !fluo;
-    light = millis() + 10000;
   }
   if(millis() > second) {
     mono.xy(128, 5);
@@ -62,18 +82,16 @@ void loop() {
     semicolon = !semicolon;
     second = millis() + 1000;
   }
-  if(millis() > simule) {
-    m += 5;
-    if(m > 55) {
-      h++;
-      m = 0;
-    }
-    if(h > 20) h = 15;
+  REValue r = encoders[0].read();
+  if(r != STILL) {
+    time = time + r;
+    if(time > 20 * 60)
+      time = 20 * 60;
+    else if(time < 6 * 60)
+      time = 6 * 60;
     numbers.xy(3, 32);
     numbers.write(F("06:00"));
     numbers.moveX(21);
-    sprintf(buffer,"%02d:%02d", h, m);
-    numbers.write(buffer);
-    simule = millis() + random(500, 3500);
+    writeTime(time);
   }
 }

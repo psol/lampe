@@ -44,7 +44,7 @@
 
 #define bg_colour rgb565(80, 120, 120)
 
-uint16_t buffer[BYTE];  // shared buffer
+static uint16_t buffer[BYTE];  // shared buffer
 
 inline void selectSlave() {
   digitalWrite(CS_PIN, LOW);
@@ -206,7 +206,7 @@ protected:
 
 // implementations
 
-static PrestoST7735& PrestoST7735::Instance() {
+PrestoST7735& PrestoST7735::Instance() {
   static PrestoST7735 instance; // Guaranteed to be destroyed.
                                 // Instantiated on first use.
   return instance;
@@ -239,7 +239,7 @@ void PrestoST7735::erase() {
 }
 
 void PrestoText::write(const char* msg) {
-  char* current = msg;
+  const char* current = msg;
   while(*current != '\0') {
     draw(*current++);
   }
@@ -258,7 +258,7 @@ void Monospace5x7::draw(char c) {
   assert(_x + MONO_WIDTH < ST7735_WIDTH);
   assert(_y + MONO_HEIGHT < ST7735_HEIGHT);
 
-  uint16_t glyph = Font5x7 + ((c - ' ') * MONO_WIDTH);
+  uintptr_t glyph = reinterpret_cast<uintptr_t>(Font5x7) + ((c - ' ') * MONO_WIDTH);
   selectSlave();
   // a line = the font height
   // we draw the character from left to right
@@ -270,7 +270,7 @@ void Monospace5x7::draw(char c) {
 void Proportional15x21::draw(char c) {
   assert(_y + PROP_HEIGHT < ST7735_HEIGHT);
   
-  uint16_t glyph = Liberation_Sans15x21_Numbers + (((c - '.')) * PROP_DEF_LEN);
+  uintptr_t glyph = reinterpret_cast<uintptr_t>(Liberation_Sans15x21_Numbers) + (((c - '.')) * PROP_DEF_LEN);
   selectSlave();
   // a line = the font height
   // we draw the glyph from left to right
@@ -295,7 +295,7 @@ void Symbols25x16::draw(char c) {
   assert(_y + SYMBOLS_HEIGHT < ST7735_HEIGHT);
   
   byte y0 = _y + BYTE;
-  uint16_t glyph = symbols + (((c - '0')) * SYMBOLS_DEF_LEN);
+  uintptr_t glyph = reinterpret_cast<uintptr_t>(symbols) + (((c - '0')) * SYMBOLS_DEF_LEN);
   
   selectSlave();
   // a line = the font height
