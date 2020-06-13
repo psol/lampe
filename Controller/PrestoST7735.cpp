@@ -270,7 +270,7 @@ void Monospace5x7::draw(char c) {
 void Proportional15x21::draw(char c) {
   assert(_y + PROP_HEIGHT < ST7735_HEIGHT);
   
-  uintptr_t glyph = reinterpret_cast<uintptr_t>(Liberation_Sans15x21_Numbers) + (((c - '.')) * PROP_DEF_LEN);
+  uintptr_t glyph = reinterpret_cast<uintptr_t>(Liberation_Sans15x21_Numbers) + (((c - '-')) * PROP_DEF_LEN);
   selectSlave();
   // a line = the font height
   // we draw the glyph from left to right

@@ -1,5 +1,5 @@
-#import <arduino.h>
-#import "spec.h"
+#include <arduino.h>
+#include "spec.h"
 
 #ifndef NDEBUG
 void __assert (const char *func, const char *file, int line, const char *failedexpr)

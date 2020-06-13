@@ -17,19 +17,11 @@ REValue RotaryEncoder::read() {
 
   if(_state == 0xf000) {
     _state = 0x0000;
-    return digitalRead(_data) ? CW : CCW;
+    if(digitalRead(_button) == HIGH)
+      return digitalRead(_data) ? CW : CCW;
+    else
+      return digitalRead(_data) ? FCW : FCCW;
   }
 
   return STILL;
-}
-
-bool RotaryEncoder::click() {
-  int click = digitalRead(_button);
-  if(click == LOW && _click != LOW) {
-    _click = LOW;
-    return true;
-  }
-  _click = click;
-
-  return false;
 }

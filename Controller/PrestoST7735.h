@@ -16,6 +16,9 @@
 #define rgb565(r,g,b) (uint16_t)(b & 0xF8) | ((g & 0xE0) >> 5) | ((g & 0x1C) << 11) | ((r & 0xF8) << 5)
 #define fg_colour rgb565(10,  0, 30)
 
+#define X_PROPORTIONAL15X21     ';'
+#define ERASE_PROPORTIONAL15X21 '<'
+
 enum font { monospace5x7, proportional15x21, symbols25x16 };
 
 class PrestoText {
