@@ -59,6 +59,14 @@ inline void transferCommand(byte c) {
   SPI.transfer(c);
 }
 
+inline uintptr_t proportionalGlyphPtr(char c) {
+  return reinterpret_cast<uintptr_t>(Liberation_Sans15x21_Numbers) + (((c - '-')) * PROP_DEF_LEN);
+}
+
+inline uintptr_t symbolsGlyphPtr(char c) {
+  return reinterpret_cast<uintptr_t>(symbols) + (((c - '0')) * SYMBOLS_DEF_LEN);
+}
+
 void viewbox(byte x0, byte y0, byte x1, byte y1) {
   assert(x0 < ST7735_WIDTH);
   assert(x1 < ST7735_WIDTH);
@@ -188,6 +196,8 @@ public:
   Monospace5x7() : PrestoText(0, 0, fg_colour) {};
 protected:
   void draw(char c);
+  void erase(byte toX);
+  byte width(char c);
 };
 
 class Proportional15x21: public PrestoText {
@@ -195,6 +205,8 @@ public:
   Proportional15x21() : PrestoText(0, 0, fg_colour) {};
 protected:
   void draw(char c);
+  void erase(byte toX);
+  byte width(char c);
 };
 
 class Symbols25x16: public PrestoText {
@@ -202,6 +214,8 @@ public:
   Symbols25x16() : PrestoText(0, 0, fg_colour) {};
 protected:
   void draw(char c);
+  void erase(byte toX);
+  byte width(char c);
 };
 
 // implementations
@@ -238,20 +252,37 @@ void PrestoST7735::erase() {
   }
 }
 
-void PrestoText::write(const char* msg) {
+void PrestoText::write(const char* msg, const __FlashStringHelper* eraser) {
+  unsigned eraseToX = _x + width(eraser);
   const char* current = msg;
   while(*current != '\0') {
     draw(*current++);
   }
+  erase(eraseToX);
 }
 
-void PrestoText::write(const __FlashStringHelper* msg) {
+void PrestoText::write(const __FlashStringHelper* msg, const __FlashStringHelper* eraser) {
+  unsigned eraseToX = _x + width(eraser);
   PGM_P current = reinterpret_cast<PGM_P>(msg);
   unsigned char c = pgm_read_byte(current++);
   while(c != '\0') {
     draw(c);
     c = pgm_read_byte(current++);
   }
+  erase(eraseToX);
+}
+
+unsigned PrestoText::width(const __FlashStringHelper* text) {
+  unsigned result = 0;
+  if(text) {
+    PGM_P current = reinterpret_cast<PGM_P>(text);
+    unsigned char c = pgm_read_byte(current++);
+    while(c != '\0') {
+      result += width(c);
+      c = pgm_read_byte(current++);
+    }
+  }
+  return result;
 }
 
 void Monospace5x7::draw(char c) {
@@ -264,13 +295,27 @@ void Monospace5x7::draw(char c) {
   // we draw the character from left to right
   for(byte i = 0;i < MONO_WIDTH;i++)
     writeLine(pgm_read_byte(glyph++), _x++, _y, BYTE, _foreground);
-  _x++; // spacing between glyph
+  erase(_x);  // spacing between glyphs
+}
+
+void Monospace5x7::erase(byte toX) {
+  assert(toX < ST7735_WIDTH);
+  assert(_y + MONO_HEIGHT < ST7735_HEIGHT);
+
+  while(_x <= toX) {
+    writeLine(0, _x++, _y, BYTE, _foreground);
+  }
+}
+
+byte Monospace5x7::width(char c) {
+  // +1 = spacing between glyph
+  return MONO_WIDTH + 1;
 }
 
 void Proportional15x21::draw(char c) {
   assert(_y + PROP_HEIGHT < ST7735_HEIGHT);
   
-  uintptr_t glyph = reinterpret_cast<uintptr_t>(Liberation_Sans15x21_Numbers) + (((c - '-')) * PROP_DEF_LEN);
+  uintptr_t glyph = proportionalGlyphPtr(c);
   selectSlave();
   // a line = the font height
   // we draw the glyph from left to right
@@ -288,14 +333,30 @@ void Proportional15x21::draw(char c) {
     writeLine(0, _x, _y + BYTE, BYTE, _foreground);
     writeLine(0, _x, _y + WORD, 5,    _foreground);
   }
-  _x++; // spacing between glyphs
+  erase(_x);  // spacing between glyphs
+}
+
+void Proportional15x21::erase(byte toX) {
+  assert(toX < ST7735_WIDTH);
+  assert(_y + PROP_HEIGHT < ST7735_HEIGHT);
+
+  while(_x <= toX) {
+    writeLine(0, _x,   _y,        BYTE, _foreground);
+    writeLine(0, _x,   _y + BYTE, BYTE, _foreground);
+    writeLine(0, _x++, _y + WORD, 5,    _foreground);
+  }
+}
+
+byte Proportional15x21::width(char c) {
+  // +1 = spacing between glyph
+  return pgm_read_byte(proportionalGlyphPtr(c)) + 1;
 }
 
 void Symbols25x16::draw(char c) {
   assert(_y + SYMBOLS_HEIGHT < ST7735_HEIGHT);
   
   byte y0 = _y + BYTE;
-  uintptr_t glyph = reinterpret_cast<uintptr_t>(symbols) + (((c - '0')) * SYMBOLS_DEF_LEN);
+  uintptr_t glyph = symbolsGlyphPtr(c);
   
   selectSlave();
   // a line = the font height
@@ -306,7 +367,22 @@ void Symbols25x16::draw(char c) {
     writeLine(pgm_read_byte(glyph++), _x,   y0, BYTE, _foreground);
     writeLine(pgm_read_byte(glyph++), _x++, _y, BYTE, _foreground);
   }
-  _x++; // spacing between glyphs
+  erase(_x);  // spacing between glyphs
+}
+
+void Symbols25x16::erase(byte toX) {
+  assert(toX < ST7735_WIDTH);
+  assert(_y + SYMBOLS_HEIGHT < ST7735_HEIGHT);
+
+  while(_x <= toX) {
+    writeLine(0, _x,   _y + BYTE, BYTE, _foreground);
+    writeLine(0, _x++, _y,        BYTE, _foreground);
+  }
+}
+
+byte Symbols25x16::width(char c) {
+  // +1 = spacing between glyph
+  return pgm_read_byte(symbolsGlyphPtr(c)) + 1;
 }
 
 void PrestoST7735::begin() {

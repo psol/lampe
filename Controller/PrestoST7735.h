@@ -17,15 +17,14 @@
 #define fg_colour rgb565(10,  0, 30)
 
 #define X_PROPORTIONAL15X21     ';'
-#define ERASE_PROPORTIONAL15X21 '<'
 
 enum font { monospace5x7, proportional15x21, symbols25x16 };
 
 class PrestoText {
 public:
   PrestoText(byte x, byte y, uint16_t foreground) : _x(x), _y(y), _foreground(foreground) {}
-  void write(const char* msg);
-  void write(const __FlashStringHelper* msg);
+  void write(const char* msg, const __FlashStringHelper* eraser = nullptr);
+  void write(const __FlashStringHelper* msg, const __FlashStringHelper* eraser = nullptr);
   void xy(byte x, byte y)
     { _x = x; _y = y; }
   void x(byte x)
@@ -46,7 +45,10 @@ public:
 protected:
   byte _x, _y;
   uint16_t _foreground;
+  unsigned width(const __FlashStringHelper* eraser);
   virtual void draw(char c) = 0;
+  virtual void erase(byte toX) = 0;
+  virtual byte width(char c) = 0;
 };
 
 class PrestoST7735

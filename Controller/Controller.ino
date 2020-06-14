@@ -6,12 +6,18 @@
  */
 
 #include <SPI.h>
+#include <EEPROM.h>
+#include "spec.h"
 #include "PrestoST7735.h"
 #include "RotaryEncoder.h"
 #include "TimeMachine.h"
-#include "spec.h"
 
-#define MODE_PIN 12
+#define MODE_PIN    12
+#define ADDRESS_PTR 0
+#define REMOTE_PTR  ADDRESS_PTR + 1
+#define ZONE_PTR    ADDRESS_PTR + 2
+#define SYSTEM_MODE LOW
+#define LIGHT_MODE  HIGH
 
 PrestoST7735& st7735 = PrestoST7735::Instance();
 RotaryEncoder encoders[4] = {
@@ -21,8 +27,22 @@ RotaryEncoder encoders[4] = {
   RotaryEncoder(A4, A5, A3),
 };
 TimeMachine timeMachine(6 * 60, 8 * 60, 18 * 60, 23.5 * 60);
-uint_fast8_t address = 0x42;
-int_fast8_t zone = 2;
+uint_fast8_t address;
+uint_fast8_t remote = 0;
+union {
+   int8_t i8;
+   uint8_t ui8;
+} zone;
+
+inline uint_fast8_t constrainAddress(uint_fast8_t address) {
+  // EEPROM initialises to 0xFF, defaults to the address of the LED controller
+  if(address == 0xFF) address = 0x42;
+  return constrain(address, 0x40, 0x49);
+}
+
+inline int8_t constrainZone(int8_t zone) {
+  return constrain(zone, -11, +11);
+}
 
 void writeTime(uint_fast16_t time) {
   static PrestoText& numbers = st7735.text(proportional15x21);
@@ -32,19 +52,15 @@ void writeTime(uint_fast16_t time) {
   numbers.write(buffer);
 }
 
-inline int_fast8_t increment(REValue value) {
-  switch(value) {
-    case CW:
-    case FCW:
-      return 1;
-    case CCW:
-    case FCCW:
-      return -1;
-    default:
-      assert(false); // fall to STILL
-    case STILL:
-      return 0;
+void updateSystem(bool write = true) {
+  if(write) {
+    EEPROM.update(ADDRESS_PTR, address);
+    EEPROM.update(REMOTE_PTR, remote);
+    EEPROM.update(ZONE_PTR, zone.ui8);
   }
+  address = constrainAddress(EEPROM.read(ADDRESS_PTR));
+  remote = constrain(EEPROM.read(REMOTE_PTR), 0, 1);
+  zone.ui8 = constrainZone(EEPROM.read(ZONE_PTR));
 }
 
 void lightScreenLoop(bool redraw = false) {
@@ -71,37 +87,51 @@ void lightScreenLoop(bool redraw = false) {
 
 void systemScreenLoop(bool redraw = false) {
   static PrestoText& numbers = st7735.text(proportional15x21);
-  static PrestoText& mono = st7735.text(monospace5x7);
+  static PrestoText& mono    = st7735.text(monospace5x7);
+  static PrestoText& symbols = st7735.text(symbols25x16);
   static char buffer[5];
   // the font definition packs the characters… '<' is erase
-  static const char *timeFormat = "%d<<";
-  // assert that the erase character has not been re-assigned
-  assert(timeFormat[2] == ERASE_PROPORTIONAL15X21);
-  assert(timeFormat[3] == ERASE_PROPORTIONAL15X21);
+  static const char *timeFormat = "%d";
 
   REValue r = encoders[0].read();
   // due to font limitation, we cannot display a hexadecimal number that needs a letter
   // the range is large enough to avoid conflicts, in practice; not worth a large font set
-  address = constrain(address + increment(r), 0x40, 0x49);
+  address = address + increment(r);
+  if(address > 0x49) {
+    remote = !remote;
+    address = 0x40;
+  }
+  else if(address < 0x40) {
+    remote = !remote;
+    address = 0x49;
+  }
+  address = constrainAddress(address);
   redraw = redraw || r != STILL;
 
   r = encoders[1].read();
-  zone = constrain(zone + increment(r), -11, +11);
+  zone.i8 = constrainZone(zone.i8 + increment(r));
   redraw = redraw || r != STILL;
 
   if(redraw) {
     mono.xy(3, 22);
-    mono.write(F("Adresse I2C:"));
+    mono.write(F("Canal I2C et fonction :"));
     numbers.xy(3, 32);
     sprintf(buffer, "%#2x", address);
-    buffer[1] = X_PROPORTIONAL15X21;  // the font definition packs the characters…
+    // the font definition packs the characters…
+    // replaces 'x' with the packed glyph
+    buffer[1] = X_PROPORTIONAL15X21;
     numbers.write(buffer);
+    symbols.xy(73, 36);
+    symbols.foreground(fg_colour);
+    symbols.write(remote ? F("2") : F("0"), F("0"));
+    mono.xy(99, 45);
+    mono.write(remote ? F("distant") : F("LED"), F("distant"));
 
     mono.xy(3, 60);
-    mono.write(F("GMT +/-:"));
+    mono.write(F("GMT +/- :"));
     numbers.xy(3, 70);
-    sprintf(buffer, timeFormat, zone);
-    numbers.write(buffer);
+    sprintf(buffer, timeFormat, zone.i8);
+    numbers.write(buffer, F("-00"));
   }
 }
 
@@ -115,6 +145,7 @@ void setup() {
   st7735.begin();
   st7735.erase();
   pinMode(MODE_PIN, INPUT_PULLUP);
+  updateSystem(false);
 }
 
 void loop() {
@@ -124,12 +155,14 @@ void loop() {
   static bool semicolon = true;
   static bool transmit = true;
   static bool fluo = true;
-  static PrestoText& mono = st7735.text(monospace5x7);
+  static PrestoText& mono    = st7735.text(monospace5x7);
   static PrestoText& symbols = st7735.text(symbols25x16);
-  static int mode = -1;
-  int r = digitalRead(MODE_PIN);
-  if(mode != r)
+  static int prev_mode = -1;
+  int mode = digitalRead(MODE_PIN);
+  if(mode != prev_mode) {
     st7735.erase();
+    updateSystem(prev_mode == SYSTEM_MODE);
+  }
   if(millis() > fail) {
     if(transmit)
       fail = millis() + random(2000, 4000);
@@ -145,6 +178,9 @@ void loop() {
     light = millis() + 10000;
   }
   if(millis() > second) {
+    if(mode == SYSTEM_MODE)
+      updateSystem();
+
     mono.xy(128, 5);
     mono.write(semicolon ? F("10:21") : F("10 21"));
     symbols.foreground(fg_colour);
@@ -154,9 +190,9 @@ void loop() {
     semicolon = !semicolon;
     second = millis() + 1000;
   }
-  if(r == LOW)
-    systemScreenLoop(mode != r);
+  if(mode == SYSTEM_MODE)
+    systemScreenLoop(mode != prev_mode);
   else
-    lightScreenLoop(mode != r);
-  mode = r;
+    lightScreenLoop(mode != prev_mode);
+  prev_mode = mode;
 }

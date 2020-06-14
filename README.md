@@ -72,6 +72,17 @@ The whole point of this project is to drive the led strip through 4 rotary encod
 settings two time intervals by direct manipulation.
 The class is a very simple wrapper for the rotary encoders, it includes simple debouncing.
 
+### Light and System loops
+
+There are two different loops (controlled by pin 12, connect to an SPST switch).
+The primary loop is the light loop and it controls the 2 periods on which the LED
+are turned on.
+
+The secondary loop is the system loop which is a configuration screen for the I2C
+"channel" or address. The role that this controller is in (controlling the LED or
+a remote controller), the time zone (GMT +/- hours) and ultimately the quality
+of the light (intensity and colour).
+
 ## Symbols
 This is a compiler for symbol descriptor, given a set bitmap images (ideally monochrome),
 it compiles a byte that describe the symbols. This is used to generate the symbols.h

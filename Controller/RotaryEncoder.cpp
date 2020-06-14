@@ -4,6 +4,7 @@
  */
 
 #include <arduino.h>
+#include "spec.h"
 #include "RotaryEncoder.h"
 
 void RotaryEncoder::begin() {

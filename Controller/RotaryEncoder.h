@@ -28,4 +28,19 @@ protected:
   uint_fast16_t _state;
 };
 
+inline int_fast8_t increment(REValue value) {
+  switch(value) {
+    case CW:
+    case FCW:
+      return 1;
+    case CCW:
+    case FCCW:
+      return -1;
+    default:
+      assert(false); // fall to STILL
+    case STILL:
+      return 0;
+  }
+}
+
 #endif // __ROTARY_ENCODER_H
